@@ -1,0 +1,240 @@
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Bell, Settings, Trash2, Volume2, ShoppingCart, Minus, Plus, Search, ChevronRight, X, Tent } from "lucide-react";
+import * as Ably from 'ably';
+
+const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+
+const translations = {
+  ko: { title: "LAZYJOE 캠핑 매점", info: "메뉴를 선택하신 후 호출 버튼을 눌러주세요.", placeholder: "추가 요청 사항 (예: 상추 많이)", button: "사장님 호출하기", success: "주문이 전달되었습니다!", staff: "관리자 모드", cart: "장바구니", label: "🇰🇷 한국어" },
+  en: { title: "LAZYJOE Camp Store", info: "Select items and press the call button.", placeholder: "Special requests", button: "Call Manager", success: "Order sent!", staff: "Staff Mode", cart: "Cart", label: "🇺🇸 EN" },
+  ru: { title: "LAZYJOE Магазин", info: "Выберите товары и нажмите кнопку вызова.", placeholder: "Пожелания", button: "Вызвать администратора", success: "Запрос успешно отправлен!", staff: "Админ", cart: "Корзина", label: "🇷🇺 RU" }
+};
+
+const menuItems = [
+  // 바베큐 (BBQ)
+  { id: "pork_neck", name: "이베리코 목살 200g", nameEn: "Iberico Pork Neck 200g", nameRu: "Шейка Иберико 200г", price: "15,000", image: "/attached_assets/pork_neck.jpg", category: "BBQ" },
+  { id: "pork_ribs", name: "이베리코 갈빗살 200g", nameEn: "Iberico Pork Ribs 200g", nameRu: "Ребрышки Иберико 200г", price: "18,000", image: "/attached_assets/pork_ribs.jpg", category: "BBQ" },
+  { id: "pork_belly", name: "한돈 삼겹살 400g", nameEn: "Pork Belly 400g", nameRu: "Свиная грудинка 400г", price: "20,000", image: "/attached_assets/pork_belly.jpg", category: "BBQ" },
+  { id: "ssamjang", name: "쌈장", nameEn: "Ssamjang", nameRu: "Соевая паста (Ссамджанг)", price: "2,500", image: "/attached_assets/ssamjang.jpg", category: "BBQ" },
+  { id: "vegetable", name: "깻잎 상추 세트", nameEn: "Perilla & Lettuce Set", nameRu: "Набор листьев периллы и салата", price: "3,500", image: "/attached_assets/vegetable.jpg", category: "BBQ" },
+  { id: "chili_garlic", name: "고추 마늘 세트", nameEn: "Chili & Garlic Set", nameRu: "Набор: острый перец и чеснок", price: "1,000", image: "/attached_assets/chili_garlic.jpg", category: "BBQ" },
+  { id: "salt_set", name: "소금, 쌈장 세트", nameEn: "Salt & Ssamjang Set", nameRu: "Набор: соль и соевая паста", price: "1,000", image: "/attached_assets/salt_set.jpg", category: "BBQ" },
+
+  // 간편조리 (MEAL)
+  { id: "rice", name: "햇반", nameEn: "Instant Steamed Rice", nameRu: "Готовый рис (Хэтбан)", price: "2,000", image: "/attached_assets/rice.jpg", category: "MEAL" },
+  { id: "ramen_shin", name: "한강라면 신라면", nameEn: "Self-cook Ramen (Shin)", nameRu: "Рамён Син", price: "4,000", image: "/attached_assets/ramen_shin.jpg", category: "MEAL" },
+  { id: "ramen_jin_m", name: "한강라면 진라면(순)", nameEn: "Self-cook Ramen (Jin Mild)", nameRu: "Рамён Джин (неострый)", price: "4,000", image: "/attached_assets/ramen_jin_m.jpg", category: "MEAL" },
+  { id: "ramen_jin_s", name: "한강라면 진라면(매)", nameEn: "Self-cook Ramen (Jin Spicy)", nameRu: "Рамён Джин (острый)", price: "4,000", image: "/attached_assets/ramen_jin_s.jpg", category: "MEAL" },
+  { id: "ramen_neoguri", name: "한강라면 너구리", nameEn: "Self-cook Ramen (Neoguri)", nameRu: "Рамён Неогури", price: "4,000", image: "/attached_assets/ramen_neoguri.jpg", category: "MEAL" },
+//  { id: "ramen_buldak", name: "한강라면 불닭", nameEn: "Self-cook Ramen (Buldak)", nameRu: "Рамён Бульдак (острый)", price: "4,000", image: "/attached_assets/ramen_buldak.jpg", category: "MEAL" },
+  { id: "ramen_jjapa", name: "한강라면 짜파게티", nameEn: "Self-cook Ramen (Jjapagetti)", nameRu: "Рамён Чапагетти", price: "4,000", image: "/attached_assets/ramen_jjapa.jpg", category: "MEAL" },
+//  { id: "fishcake", name: "오뎅탕", nameEn: "Fish Cake Soup", nameRu: "Суп с рыбными котлетами", price: "5,000", image: "/attached_assets/fishcake.jpg", category: "MEAL" },
+  { id: "tteokbokki", name: "미미네 국물떡볶이", nameEn: "Tteokbokki", nameRu: "Ттокпокки", price: "8,500", image: "/attached_assets/tteokbokki.jpg", category: "MEAL" },
+  { id: "cup_ramen", name: "컵라면", nameEn: "Cup Ramen", nameRu: "Рамён в стакане", price: "2,000", image: "/attached_assets/cup_ramen.jpg", category: "MEAL" },
+  { id: "carbo_buldak", name: "까르보 불닭 작은컵", nameEn: "Carbo Buldak (Small)", nameRu: "Карбо Бульдак (маленький)", price: "2,000", image: "/attached_assets/carbo_buldak.jpg", category: "MEAL" },
+  { id: "cheese_tteok", name: "치즈 떡볶이 컵", nameEn: "Cheese Tteokbokki Cup", nameRu: "Ттокпокки с сыром (стакан)", price: "2,500", image: "/attached_assets/cheese_tteok.jpg", category: "MEAL" },
+
+  // 음료 (DRINK)
+  { id: "water_2l", name: "생수 2L", nameEn: "Mineral Water 2L", nameRu: "Вода 2л", price: "1,500", image: "/attached_assets/water_2l.jpg", category: "DRINK" },
+  { id: "water_500", name: "생수 500ml", nameEn: "Mineral Water 500ml", nameRu: "Вода 500мл", price: "1,000", image: "/attached_assets/water_500.jpg", category: "DRINK" },
+  { id: "pepsi", name: "펩시콜라 355ml", nameEn: "Pepsi 355ml", nameRu: "Пепси 355мл", price: "2,000", image: "/attached_assets/pepsi.jpg", category: "DRINK" },
+  { id: "sprite", name: "스프라이트 215ml", nameEn: "Sprite 215ml", nameRu: "Спрайт 215мл", price: "1,500", image: "/attached_assets/sprite.jpg", category: "DRINK" },
+  { id: "fanta", name: "환타 215ml", nameEn: "Fanta 215ml", nameRu: "Фанта 215мл", price: "1,500", image: "/attached_assets/fanta.jpg", category: "DRINK" },
+  { id: "coke", name: "코카콜라 215ml", nameEn: "Coca-Cola 215ml", nameRu: "Кока-кола 215мл", price: "1,500", image: "/attached_assets/coke.jpg", category: "DRINK" },
+  { id: "pepsi_zero", name: "제로펩시 라임 500ml", nameEn: "Zero Pepsi Lime 500ml", nameRu: "Зеро Пепси Лайм 500мл", price: "2,000", image: "/attached_assets/pepsi_zero.jpg", category: "DRINK" },
+  { id: "caprisun", name: "카프리썬", nameEn: "Capri Sun", nameRu: "Капри-сан", price: "2,000", image: "/attached_assets/caprisun.jpg", category: "DRINK" },
+  { id: "pororo", name: "뽀로로", nameEn: "Pororo Juice", nameRu: "Сок Пороро", price: "1,500", image: "/attached_assets/pororo.jpg", category: "DRINK" },
+  { id: "cider", name: "사이다 215ml", nameEn: "Cider (Chilsung) 215ml", nameRu: "Спрайт(Сидр) 215мл", price: "1,500", image: "/attached_assets/cider.jpg", category: "DRINK" },
+  { id: "sikhye", name: "비락식혜", nameEn: "Rice Punch (Sikhye)", nameRu: "Рисовый напиток (Сикхе)", price: "1,500", image: "/attached_assets/sikhye.jpg", category: "DRINK" },
+
+  // 주류 (ALCOHOL)
+  { id: "cass_zero", name: "카스제로 355ml", nameEn: "Cass Zero (Non-alc)", nameRu: "Безалкогольное пиво Cass", price: "3,000", image: "/attached_assets/cass_zero.jpg", category: "ALCOHOL" },
+  { id: "cass", name: "카스 454ml", nameEn: "Cass 454ml", nameRu: "Cass 454ml", price: "4,500", image: "/attached_assets/cass.jpg", category: "ALCOHOL" },
+  { id: "kelly", name: "켈리 355ml", nameEn: "Kelly Beer 355ml", nameRu: "Пиво Kelly 355мл", price: "3,500", image: "/attached_assets/kelly.jpg", category: "ALCOHOL" },
+  { id: "terra_355", name: "테라 355ml", nameEn: "Terra Beer 355ml", nameRu: "Пиво Terra 355мл", price: "3,500", image: "/attached_assets/terra_355.jpg", category: "ALCOHOL" },
+  { id: "terra_453", name: "테라 453ml", nameEn: "Terra Beer 453ml", nameRu: "Пиво Terra 453мл", price: "4,500", image: "/attached_assets/terra_453.jpg", category: "ALCOHOL" },
+  { id: "highball_g", name: "짐빔하이볼 자몽", nameEn: "Jim Beam Highball Grapefruit", nameRu: "Джим Бим Хайбол Грейпфрут", price: "4,500", image: "/attached_assets/highball_g.jpg", category: "ALCOHOL" },
+  { id: "highball_l", name: "짐빔하이볼 레몬", nameEn: "Jim Beam Highball Lemon", nameRu: "Джим Бим Хайбол Лимон", price: "4,500", image: "/attached_assets/highball_l.jpg", category: "ALCOHOL" },
+
+  // 카페 (CAFE)
+  { id: "coffee_hot", name: "아메리카노 HOT", nameEn: "Americano (Hot)", nameRu: "Америкaнo (горячий)", price: "3,500", image: "/attached_assets/coffee_hot.jpg", category: "CAFE" },
+  { id: "coffee_ice", name: "아메리카노 ICE", nameEn: "Americano (Ice)", nameRu: "Америкaнo (холодный)", price: "4,000", image: "/attached_assets/coffee_ice.jpg", category: "CAFE" },
+  { id: "choco_hot", name: "핫초코", nameEn: "Hot Chocolate", nameRu: "Горячий шоколад", price: "3,500", image: "/attached_assets/choco_hot.jpg", category: "CAFE" },
+  { id: "choco_ice", name: "아이스초코", nameEn: "Ice Chocolate", nameRu: "Холодный шоколад", price: "4,000", image: "/attached_assets/choco_ice.jpg", category: "CAFE" },
+
+  // 대여/기타 (ETC)
+  { id: "grill", name: "웨버 가스그릴", nameEn: "Weber Gas Grill Rental", nameRu: "Аренда газового гриля Weber", price: "35,000", image: "/attached_assets/grill.jpg", category: "ETC" },
+  { id: "burner_set", name: "강염버너 그리들 세트", nameEn: "Burner & Griddle Set", nameRu: "Набор горелки и гриля", price: "25,000", image: "/attached_assets/burner_set.jpg", category: "ETC" },
+  { id: "towel", name: "바스타올", nameEn: "Bath Towel", nameRu: "Банное полотенце", price: "5,000", image: "/attached_assets/towel.jpg", category: "ETC" },
+  { id: "firewood", name: "참나무 장작", nameEn: "Oak Firewood", nameRu: "Дубовые дрова", price: "12,000", image: "/attached_assets/firewood.jpg", category: "ETC" },
+  { id: "marshmallow", name: "마시멜로", nameEn: "Marshmallows", nameRu: "Маршмэллоу", price: "3,000", image: "/attached_assets/marshmallow.jpg", category: "ETC" },
+//  { id: "magic_powder", name: "오로라 가루", nameEn: "Magic Fire Powder", nameRu: "Магический порошок для костра", price: "2,000", image: "/attached_assets/magic_powder.jpg", category: "ETC" }
+];
+
+export default function CampingStore() {
+  const [apiKey, setApiKey] = useState(localStorage.getItem("ably_api_key") || "");
+  const [tentId, setTentId] = useState(localStorage.getItem("tent_id") || ""); 
+  const [lang, setLang] = useState<keyof typeof translations>('ko');
+  const [isOwner, setIsOwner] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [guestMessage, setGuestMessage] = useState("");
+  const [channel, setChannel] = useState<any>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [cart, setCart] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const t = translations[lang];
+
+  useEffect(() => {
+    if (!apiKey) return;
+    try {
+      const client = new Ably.Realtime(apiKey);
+      const chan = client.channels.get('lazyjoe-call');
+      setChannel(chan);
+      client.connection.on('connected', () => setIsConnected(true));
+      client.connection.on('disconnected', () => setIsConnected(false));
+      return () => client.close();
+    } catch (e) { console.error(e); }
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (!isOwner || !channel) return;
+    const sub = (message: any) => {
+      setMessages(prev => [{ id: message.id, ...message.data }, ...prev]);
+      if (audioRef.current) audioRef.current.play().catch(() => {});
+    };
+    channel.subscribe('call', sub);
+    return () => channel.unsubscribe('call');
+  }, [isOwner, channel]);
+
+  const sendCall = async () => {
+    if (!tentId) { alert("텐트 번호를 입력해주세요!"); setShowSettings(true); return; }
+    if (!channel || (Object.keys(cart).length === 0 && !guestMessage)) return;
+
+    const cartSummary = Object.entries(cart)
+      .map(([id, qty]) => `${menuItems.find(m => m.id === id)?.name}(${qty})`)
+      .join(", ");
+    
+    const finalMessage = `[${tentId}] ${cartSummary} ${guestMessage ? ' | 요청: ' + guestMessage : ''}`;
+    
+    try {
+      await channel.publish('call', { text: finalMessage, lang, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      setCart({}); setGuestMessage("");
+      alert(t.success);
+    } catch (err) { alert("실패!"); }
+  };
+
+  const filteredItems = menuItems.filter(item => 
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    item.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.nameRu.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen w-full bg-[#FDFCFB] text-[#2D2D2D] pb-44">
+      <audio ref={audioRef} src={ALERT_SOUND_URL} />
+      
+      <header className="sticky top-0 z-50 bg-[#1A1A1A] text-white px-6 py-5 shadow-2xl rounded-b-[35px]">
+        <div className="flex justify-between items-center max-w-2xl mx-auto">
+          <div>
+            <h1 className="text-2xl font-light tracking-[0.3em]">LAZYJOE</h1>
+            <p className="text-[9px] text-orange-400 tracking-widest uppercase font-bold">Premium Stay {tentId && `| ${tentId}`}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex bg-white/10 p-1 rounded-full">
+              {(Object.keys(translations) as Array<keyof typeof translations>).map((l) => (
+                <button key={l} onClick={() => setLang(l)} className={`px-3 py-1.5 rounded-full text-[10px] font-black ${lang === l ? "bg-orange-500 text-white" : "text-white/40"}`}>
+                  {translations[l].label.split(' ')[1]}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowSettings(true)} className="p-2 text-white/40"><Settings size={20} /></button>
+          </div>
+        </div>
+      </header>
+
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-6 backdrop-blur-md">
+            <div className="bg-white w-full max-w-sm rounded-[40px] p-10 space-y-6">
+              <h3 className="text-xl font-black">기기 설정</h3>
+              <div className="space-y-4">
+                <input className="w-full border-2 border-stone-100 rounded-2xl h-14 px-4 font-bold text-lg focus:border-orange-500 outline-none" placeholder="텐트 번호 (예: 3번 텐트)" value={tentId} onChange={(e) => { setTentId(e.target.value); localStorage.setItem("tent_id", e.target.value); }} />
+                <textarea className="w-full border-2 border-stone-100 rounded-2xl p-4 h-24 text-[10px] break-all focus:border-orange-500 outline-none" placeholder="Ably API Key" value={apiKey} onChange={(e) => { setApiKey(e.target.value); localStorage.setItem("ably_api_key", e.target.value); }} />
+              </div>
+              <button onClick={() => { if(!apiKey || !tentId) alert("모두 입력!"); else { setShowSettings(false); window.location.reload(); } }} className="w-full h-14 bg-black text-white rounded-2xl font-bold">저장</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <main className="max-w-2xl mx-auto px-4 mt-10">
+        {!isOwner ? (
+          <div className="space-y-8">
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl font-black tracking-tight">{t.title}</h2>
+              <p className="text-sm text-stone-400 font-medium">{t.info}</p>
+            </div>
+
+            <div className="relative group">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-300 group-focus-within:text-orange-500 transition-colors" />
+              <input placeholder="무엇을 찾으시나요? (Search...)" className="w-full pl-14 h-16 rounded-[25px] border-none bg-white shadow-xl shadow-stone-200/50 text-lg focus:ring-2 focus:ring-orange-500 outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              {filteredItems.map((item) => (
+                <div key={item.id} className="bg-white rounded-[30px] overflow-hidden shadow-sm border border-stone-50">
+                  <div className="aspect-[4/3] relative bg-stone-100">
+                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    {cart[item.id] > 0 && <div className="absolute top-4 right-4 bg-orange-500 text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full shadow-lg">{cart[item.id]}</div>}
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <p className="font-bold text-sm leading-tight h-10 line-clamp-2">{lang === 'ko' ? item.name : (lang === 'ru' ? item.nameRu : item.nameEn)}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-orange-600 font-black text-sm">₩{item.price}</p>
+                      <span className="text-[8px] text-stone-300 font-bold">{item.category}</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-stone-50 rounded-2xl p-1">
+                      <button className="w-10 h-10 flex items-center justify-center text-stone-300" onClick={() => { if(cart[item.id] > 0) setCart({...cart, [item.id]: cart[item.id]-1}) }}><Minus size={18} /></button>
+                      <span className="font-black text-sm">{cart[item.id] || 0}</span>
+                      <button className="w-10 h-10 flex items-center justify-center text-orange-500" onClick={() => setCart({...cart, [item.id]: (cart[item.id]||0)+1})}><Plus size={18} /></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+             <div className="flex justify-between items-center"><h2 className="text-2xl font-black flex items-center gap-3"><Bell className="text-orange-500 animate-pulse" /> 호출 현황</h2><span className={`px-3 py-1 rounded-full text-[10px] font-black text-white ${isConnected ? "bg-green-500" : "bg-red-500"}`}>{isConnected ? "연결됨" : "끊김"}</span></div>
+             <div className="space-y-4">
+               {messages.length === 0 ? <div className="py-20 text-center text-stone-300 border-2 border-dashed border-stone-200 rounded-[40px]"><Tent className="mx-auto mb-4 opacity-20" size={48} /><p className="font-bold">주문이 없습니다.</p></div> : 
+                 messages.map((msg, i) => (
+                   <div key={i} className="bg-white p-6 rounded-[30px] shadow-xl border-l-[12px] border-orange-500"><div className="flex justify-between mb-3"><span className="text-[10px] font-black text-stone-400 bg-stone-100 px-3 py-1 rounded-full">{msg.time}</span></div><p className="text-xl font-black text-stone-800">{msg.text}</p></div>
+                 ))
+               }
+             </div>
+             <div className="grid grid-cols-2 gap-4"><button className="h-16 bg-stone-100 text-stone-400 font-bold rounded-2xl" onClick={() => setMessages([])}><Trash2 className="inline mr-2" /> 초기화</button><button className="h-16 bg-black text-white font-bold rounded-2xl" onClick={() => audioRef.current?.play()}><Volume2 className="inline mr-2" /> 벨 테스트</button></div>
+          </div>
+        )}
+      </main>
+
+      {!isOwner && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 w-[92%] max-w-lg z-[60]">
+          <div className="bg-[#1A1A1A] rounded-[35px] p-4 shadow-2xl border border-white/10 backdrop-blur-lg">
+            <input placeholder={t.placeholder} className="w-full bg-white/5 border-none text-white h-12 px-5 rounded-2xl mb-3 outline-none placeholder:text-white/20" value={guestMessage} onChange={(e) => setGuestMessage(e.target.value)} />
+            <button onClick={sendCall} disabled={!isConnected} className={`w-full h-16 rounded-[25px] font-black text-lg flex justify-between items-center px-8 transition-all ${Object.keys(cart).length > 0 || guestMessage ? "bg-orange-500 text-white" : "bg-white/10 text-white/30"}`}>
+              <div className="flex items-center gap-3"><ShoppingCart size={24} /><span>{Object.values(cart).reduce((a, b) => a + b, 0)} Items</span></div>
+              <div className="flex items-center"><span>{t.button}</span><ChevronRight size={24} className="ml-2" /></div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-center p-10"><button className="text-[10px] font-bold text-stone-200 tracking-widest uppercase" onClick={() => setIsOwner(!isOwner)}>— {isOwner ? "Kiosk" : "Staff Only"} —</button></div>
+    </div>
+  );
+}
