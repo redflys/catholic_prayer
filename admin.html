@@ -3,16 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>기도문 관리자</title>
+    <title>기도문 관리자 (수정 기능 포함)</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; background: #f9f9f9; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input, textarea { width: 100%; padding: 10px; margin: 5px 0 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
-        .btn-add { background: #28a745; color: white; }
-        .btn-save { background: #007bff; color: white; width: 100%; }
-        .btn-del { background: #dc3545; color: white; padding: 5px 10px; font-size: 12px; }
-        .prayer-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        body { font-family: sans-serif; padding: 15px; max-width: 700px; margin: auto; background: #f4f4f4; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        input, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        textarea { height: 180px; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s; }
+        
+        .btn-add { background: #28a745; color: white; width: 100%; margin-top: 10px; }
+        .btn-edit-mode { background: #ffc107; color: #212529; width: 100%; margin-top: 10px; }
+        .btn-save { background: #007bff; color: white; width: 100%; padding: 15px; font-size: 17px; }
+        
+        .prayer-item { background: #fff; border-bottom: 1px solid #eee; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .prayer-info { flex-grow: 1; cursor: pointer; }
+        .prayer-info strong { display: block; color: #333; }
+        .btn-group { display: flex; gap: 5px; }
+        .btn-del { background: #dc3545; color: white; padding: 6px 12px; font-size: 13px; }
+        .btn-select { background: #6c757d; color: white; padding: 6px 12px; font-size: 13px; }
+        
+        #editStatus { color: #007bff; font-weight: bold; margin-bottom: 5px; display: none; }
     </style>
 </head>
 <body>
@@ -20,109 +30,162 @@
 <div class="card">
     <h2>🔑 설정</h2>
     <input type="password" id="token" placeholder="GitHub Personal Access Token 입력">
-    <p style="font-size: 12px; color: red;">* 토큰은 브라우저를 닫으면 사라지므로 매번 입력해야 합니다.</p>
 </div>
 
 <div class="card">
-    <h2>✍️ 새 기도문 추가</h2>
-    <input type="text" id="newTitle" placeholder="기도문 제목">
-    <textarea id="newContent" placeholder="기도문 내용" style="height: 100px;"></textarea>
-    <button class="btn-add" onclick="addPrayer()">리스트에 추가</button>
+    <div id="editStatus">📝 수정 모드 작동 중...</div>
+    <h2 id="formTitle">✍️ 기도문 작성</h2>
+    <input type="text" id="title" placeholder="기도문 제목">
+    <textarea id="content" placeholder="기도문 내용을 입력하거나 복사해 넣으세요..."></textarea>
+    
+    <div id="actionButtons">
+        <button class="btn-add" id="mainBtn" onclick="addOrUpdate()">리스트에 추가하기</button>
+    </div>
+    <button id="cancelBtn" style="display:none; width:100%; margin-top:5px; background:#eee;" onclick="resetForm()">수정 취소</button>
 </div>
 
 <div class="card">
-    <h2>📋 현재 기도문 목록</h2>
+    <h2>📋 기도문 목록 (클릭 시 수정)</h2>
     <div id="prayerList">불러오는 중...</div>
-    <hr>
-    <button class="btn-save" onclick="saveToGithub()">깃허브에 최종 저장하기</button>
+    <hr style="margin: 20px 0; border: 0; border-top: 1px dashed #ccc;">
+    <button class="btn-save" onclick="saveToGithub()">☁️ 깃허브에 최종 저장 (꼭 눌러주세요)</button>
+    <p id="status" style="text-align:center; font-size:13px; margin-top:10px;"></p>
 </div>
 
 <script>
-    // 본인의 정보로 수정하세요
+    // 본인의 정보로 꼭 수정하세요!
     const OWNER = "redflys";
     const REPO = "catholic_prayer";
-    const PATH = "data.json"; // 기도문 데이터가 저장될 파일
+    const PATH = "data.json";
 
     let prayers = [];
+    let editIndex = -1; // 수정 중인 항목의 번호를 저장
 
-    // 1. 깃허브에서 기존 데이터 불러오기
+    // 1. 데이터 불러오기
     async function loadPrayers() {
         try {
-            const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`);
+            const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}?t=${new Date().getTime()}`);
             if (res.ok) {
                 const data = await res.json();
-                prayers = JSON.parse(decodeURIComponent(escape(atob(data.sha ? data.content : "[]"))));
+                const decoded = decodeURIComponent(escape(atob(data.content)));
+                prayers = JSON.parse(decoded);
                 renderList();
             } else {
                 prayers = [];
                 renderList();
             }
         } catch (e) {
-            document.getElementById('prayerList').innerText = "데이터가 없습니다. 새로 만들어보세요.";
-            prayers = [];
+            document.getElementById('prayerList').innerText = "등록된 데이터가 없습니다.";
         }
     }
 
-    // 2. 화면에 목록 그리기
+    // 2. 리스트 화면 표시
     function renderList() {
         const listDiv = document.getElementById('prayerList');
-        listDiv.innerHTML = prayers.length === 0 ? "등록된 기도문이 없습니다." : "";
+        listDiv.innerHTML = prayers.length === 0 ? "목록이 비어있습니다." : "";
+        
         prayers.forEach((p, index) => {
-            listDiv.innerHTML += `
-                <div class="prayer-item">
-                    <div><strong>${p.title}</strong></div>
+            const item = document.createElement('div');
+            item.className = 'prayer-item';
+            item.innerHTML = `
+                <div class="prayer-info" onclick="prepareEdit(${index})">
+                    <strong>${p.title}</strong>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-select" onclick="prepareEdit(${index})">수정</button>
                     <button class="btn-del" onclick="deletePrayer(${index})">삭제</button>
                 </div>`;
+            listDiv.appendChild(item);
         });
     }
 
-    // 3. 리스트에 추가 (임시)
-    function addPrayer() {
-        const title = document.getElementById('newTitle').value;
-        const content = document.getElementById('newContent').value;
-        if (!title || !content) return alert("제목과 내용을 입력하세요.");
+    // 3. 수정 모드 진입
+    function prepareEdit(index) {
+        editIndex = index;
+        const p = prayers[index];
+        document.getElementById('title').value = p.title;
+        document.getElementById('content').value = p.content;
         
-        prayers.push({ title, content, date: new Date().toLocaleDateString() });
-        renderList();
-        document.getElementById('newTitle').value = "";
-        document.getElementById('newContent').value = "";
+        document.getElementById('formTitle').innerText = "📝 기도문 수정 중";
+        document.getElementById('editStatus').style.display = "block";
+        document.getElementById('mainBtn').innerText = "내용 수정 반영";
+        document.getElementById('mainBtn').className = "btn-edit-mode";
+        document.getElementById('cancelBtn').style.display = "block";
+        
+        window.scrollTo(0, 0); // 입력창으로 화면 이동
     }
 
-    // 4. 삭제 (임시)
+    // 4. 추가 또는 수정 반영
+    function addOrUpdate() {
+        const title = document.getElementById('title').value;
+        const content = document.getElementById('content').value;
+        if (!title || !content) return alert("제목과 내용을 입력하세요.");
+
+        if (editIndex > -1) {
+            // 수정 시
+            prayers[editIndex] = { ...prayers[editIndex], title, content };
+            alert("리스트 내 수정이 완료되었습니다. 최종 저장을 꼭 눌러주세요.");
+        } else {
+            // 새 추가 시
+            prayers.push({ title, content, date: new Date().toLocaleDateString() });
+        }
+        
+        resetForm();
+        renderList();
+    }
+
+    // 5. 입력창 초기화
+    function resetForm() {
+        editIndex = -1;
+        document.getElementById('title').value = "";
+        document.getElementById('content').value = "";
+        document.getElementById('formTitle').innerText = "✍️ 기도문 작성";
+        document.getElementById('editStatus').style.display = "none";
+        document.getElementById('mainBtn').innerText = "리스트에 추가하기";
+        document.getElementById('mainBtn').className = "btn-add";
+        document.getElementById('cancelBtn').style.display = "none";
+    }
+
+    // 6. 삭제
     function deletePrayer(index) {
-        if(confirm("정말 삭제할까요?")) {
+        if(confirm("이 기도문을 리스트에서 삭제할까요?")) {
             prayers.splice(index, 1);
             renderList();
         }
     }
 
-    // 5. 깃허브로 최종 전송 (저장)
+    // 7. 깃허브 최종 저장
     async function saveToGithub() {
         const token = document.getElementById('token').value;
-        if (!token) return alert("토큰을 입력해주세요.");
+        if (!token) return alert("보안을 위해 깃허브 토큰을 입력해주세요.");
 
-        const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
-        
-        // 기존 파일 SHA 받아오기
-        let sha = "";
-        const getRes = await fetch(url, { headers: { "Authorization": `token ${token}` } });
-        if (getRes.ok) {
-            const fileData = await getRes.json();
-            sha = fileData.sha;
+        const status = document.getElementById('status');
+        status.innerText = "⏳ 깃허브 서버에 저장 중...";
+
+        try {
+            const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
+            let sha = "";
+            const getRes = await fetch(url, { headers: { "Authorization": `token ${token}` } });
+            if (getRes.ok) {
+                const fileData = await getRes.json();
+                sha = fileData.sha;
+            }
+
+            const res = await fetch(url, {
+                method: "PUT",
+                headers: { "Authorization": `token ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    message: "기도문 데이터 업데이트",
+                    content: btoa(unescape(encodeURIComponent(JSON.stringify(prayers, null, 2)))),
+                    sha: sha
+                })
+            });
+
+            if (res.ok) status.innerText = "✅ 최종 저장 성공! 1분 후 앱에 반영됩니다.";
+            else status.innerText = "❌ 저장 실패. 토큰을 다시 확인하세요.";
+        } catch (e) {
+            status.innerText = "❌ 연결 오류가 발생했습니다.";
         }
-
-        const res = await fetch(url, {
-            method: "PUT",
-            headers: { "Authorization": `token ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-                message: "기도문 데이터 업데이트",
-                content: btoa(unescape(encodeURIComponent(JSON.stringify(prayers, null, 2)))),
-                sha: sha
-            })
-        });
-
-        if (res.ok) alert("성공적으로 저장되었습니다! 1분 뒤 사이트에 반영됩니다.");
-        else alert("저장 실패. 토큰이나 설정을 확인하세요.");
     }
 
     loadPrayers();
