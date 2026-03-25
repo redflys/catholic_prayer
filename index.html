@@ -3,38 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>기도문 목록</title>
+    <title>오늘의 기도문</title>
     <style>
-        body { font-family: serif; line-height: 1.8; padding: 20px; background: #fffaf0; }
-        .prayer-card { background: white; padding: 20px; border-radius: 15px; margin-bottom: 30px; border: 1px solid #ddd; }
-        h1 { text-align: center; color: #5a4a42; }
-        h2 { border-bottom: 2px solid #5a4a42; padding-bottom: 10px; color: #5a4a42; }
-        .content { white-space: pre-wrap; font-size: 1.1rem; color: #333; }
+        body { font-family: 'Malgun Gothic', serif; line-height: 1.8; padding: 20px; background: #fffaf0; max-width: 600px; margin: auto; }
+        h1 { text-align: center; color: #5a4a42; cursor: pointer; }
+        
+        /* 목록 스타일 */
+        .list-container { display: block; }
+        .prayer-item { 
+            background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; 
+            border: 1px solid #ddd; cursor: pointer; transition: 0.2s;
+        }
+        .prayer-item:hover { background: #fef0d7; }
+        .prayer-item h3 { margin: 0; font-size: 1.1rem; color: #5a4a42; }
+        .prayer-date { font-size: 0.8rem; color: #888; margin-top: 5px; }
+
+        /* 상세보기 스타일 */
+        .detail-container { display: none; background: white; padding: 25px; border-radius: 15px; border: 1px solid #ddd; }
+        .detail-title { border-bottom: 2px solid #5a4a42; padding-bottom: 10px; color: #5a4a42; margin-top: 0; }
+        .detail-content { white-space: pre-wrap; font-size: 1.15rem; color: #333; margin: 20px 0; min-height: 200px; }
+        .btn-back { display: inline-block; padding: 10px 20px; background: #5a4a42; color: white; border-radius: 5px; text-decoration: none; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>🙏가톨릭 기도문🙏</h1>
-    <div id="display">불러오는 중...</div>
+
+    <h1 onclick="showList()">🙏 기도문 목록</h1>
+
+    <div id="listContainer" class="list-container">
+        <div id="listContents">불러오는 중...</div>
+    </div>
+
+    <div id="detailContainer" class="detail-container">
+        <h2 id="detailTitle" class="detail-title"></h2>
+        <div id="detailContent" class="detail-content"></div>
+        <div style="text-align: center;">
+            <div class="btn-back" onclick="showList()">목록으로 돌아가기</div>
+        </div>
+    </div>
 
     <script>
-        // data.json 파일을 읽어서 화면에 표시
+        let allPrayers = [];
+
+        // 데이터 불러오기
         fetch('data.json')
             .then(res => res.json())
             .then(data => {
-                const display = document.getElementById('display');
-                display.innerHTML = "";
-                data.reverse().forEach(p => { // 최신글이 위로 오게
-                    display.innerHTML += `
-                        <div class="prayer-card">
-                            <h2>${p.title}</h2>
-                            <div class="content">${p.content}</div>
-                            <p style="font-size:0.8rem; color:gray; text-align:right;">${p.date}</p>
-                        </div>`;
-                });
+                allPrayers = data.reverse(); // 최신순 정렬
+                renderList();
             })
             .catch(() => {
-                document.getElementById('display').innerText = "아직 등록된 기도문이 없습니다.";
+                document.getElementById('listContents').innerText = "등록된 기도문이 없습니다.";
             });
+
+        // 리스트 화면 그리기
+        function renderList() {
+            const listDiv = document.getElementById('listContents');
+            listDiv.innerHTML = "";
+            
+            allPrayers.forEach((p, index) => {
+                const item = document.createElement('div');
+                item.className = 'prayer-item';
+                item.onclick = () => showDetail(index);
+                item.innerHTML = `
+                    <h3>${p.title}</h3>
+                    <div class="prayer-date">${p.date || ''}</div>
+                `;
+                listDiv.appendChild(item);
+            });
+
+            document.getElementById('listContainer').style.display = 'block';
+            document.getElementById('detailContainer').style.display = 'none';
+        }
+
+        // 상세보기 화면 전환
+        function showDetail(index) {
+            const prayer = allPrayers[index];
+            document.getElementById('detailTitle').innerText = prayer.title;
+            document.getElementById('detailContent').innerText = prayer.content;
+
+            document.getElementById('listContainer').style.display = 'none';
+            document.getElementById('detailContainer').style.display = 'block';
+            window.scrollTo(0, 0); // 페이지 상단으로 이동
+        }
+
+        // 목록으로 돌아가기
+        function showList() {
+            document.getElementById('listContainer').style.display = 'block';
+            document.getElementById('detailContainer').style.display = 'none';
+        }
     </script>
 </body>
 </html>
